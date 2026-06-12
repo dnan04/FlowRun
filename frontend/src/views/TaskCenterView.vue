@@ -111,6 +111,8 @@
           v-model="taskPickerKeyword"
           clearable
           placeholder="搜索任务名称"
+          @keyup.enter="loadConfiguredTasks"
+          @clear="loadConfiguredTasks"
         />
       </div>
       <el-table :data="filteredConfiguredTasks" v-loading="loadingConfiguredTasks">
@@ -234,6 +236,7 @@ const selectedTaskName = ref('')
 const taskLogs = ref<any[]>([])
 const auth = useAuthStore()
 const DEFAULT_LOG_LIMIT = 10
+const LONG_RUNNING_REQUEST_CONFIG = { timeout: 0 }
 
 const filteredTasks = computed(() => {
   if (selectedDirectoryId.value === 'all') {
@@ -376,7 +379,12 @@ const loadConfiguredTasks = async () => {
   }
   loadingConfiguredTasks.value = true
   try {
-    const { data } = await http.get('/admin/tasks')
+    const { data } = await http.get('/admin/tasks/available-for-center', {
+      params: {
+        keyword: taskPickerKeyword.value.trim() || undefined,
+        limit: 100
+      }
+    })
     configuredTasks.value = data
   } finally {
     loadingConfiguredTasks.value = false
@@ -536,7 +544,7 @@ const runTask = async (task: any) => {
     executionResultTaskName.value = task.display_name || ''
     executionResultVisible.value = true
     resultPolling.value = true
-    const { data } = await http.post(`/tasks/${taskId}/execute`, {})
+    const { data } = await http.post(`/tasks/${taskId}/execute`, {}, LONG_RUNNING_REQUEST_CONFIG)
     executionResult.value = data
     ElMessage.success('任务已提交，平台正在执行')
     await waitForExecutionResult(taskId, data.id)
@@ -551,9 +559,9 @@ const runTask = async (task: any) => {
 
 const waitForExecutionResult = async (taskId: number, executionId: number) => {
   const terminalStatuses = new Set(['SUCCEEDED', 'FAILED', 'CANCELED'])
-  for (let index = 0; index < 60; index += 1) {
+  while (true) {
     await sleep(1000)
-    const { data } = await http.get(`/tasks/${taskId}/executions`)
+    const { data } = await http.get(`/tasks/${taskId}/executions`, LONG_RUNNING_REQUEST_CONFIG)
     const latest = data.find((item: any) => item.id === executionId)
     if (latest) {
       executionResult.value = latest

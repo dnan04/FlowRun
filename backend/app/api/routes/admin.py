@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_admin
 from app.models.user import User
 from app.schemas.ds import DSConfigRead, DSMetadataOptionsRead
 from app.schemas.execution import ExecutionRecordRead
-from app.schemas.task import AdminTaskRead, TaskDirectoryCreate, TaskDirectoryRead, TaskDirectoryUpdate, TaskExecutionTestResult, TaskUpsert
+from app.schemas.task import AdminTaskListItem, AdminTaskPage, AdminTaskRead, TaskDirectoryCreate, TaskDirectoryRead, TaskDirectoryUpdate, TaskExecutionTestResult, TaskUpsert
 from app.schemas.user import SimpleUserRead
 from app.services.dolphinscheduler_service import get_ds_config, get_ds_metadata_options
 from app.services.execution_service import get_all_executions
@@ -14,7 +14,10 @@ from app.services.task_service import (
     create_task_directory,
     delete_task,
     delete_task_directory,
+    get_admin_task,
     list_all_tasks,
+    list_admin_tasks,
+    list_available_tasks_for_center,
     list_task_directories,
     remove_task_from_center,
     test_task_configuration,
@@ -26,11 +29,45 @@ from app.services.user_service import list_users
 router = APIRouter()
 
 
-@router.get("/tasks", response_model=list[AdminTaskRead])
+@router.get("/tasks", response_model=AdminTaskPage)
 def admin_list_tasks(
-    db: Session = Depends(get_db), _: User = Depends(require_admin)
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, alias="pageSize", ge=1, le=100),
+    keyword: str | None = Query(default=None),
+    engine_type: str | None = Query(default=None, alias="engineType"),
+    directory_id: int | None = Query(default=None, alias="directoryId"),
+    uncategorized: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
 ):
-    return list_all_tasks(db)
+    return list_admin_tasks(
+        db,
+        page=page,
+        page_size=page_size,
+        keyword=keyword,
+        engine_type=engine_type,
+        directory_id=directory_id,
+        uncategorized=uncategorized,
+    )
+
+
+@router.get("/tasks/available-for-center", response_model=list[AdminTaskListItem])
+def admin_list_available_tasks_for_center(
+    keyword: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return list_available_tasks_for_center(db, keyword=keyword, limit=limit)
+
+
+@router.get("/tasks/{task_id}", response_model=AdminTaskRead)
+def admin_get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return get_admin_task(db, task_id)
 
 
 @router.get("/task-directories", response_model=list[TaskDirectoryRead])
@@ -122,9 +159,12 @@ def admin_list_executions(
 
 @router.get("/users", response_model=list[SimpleUserRead])
 def admin_list_users(
-    db: Session = Depends(get_db), _: User = Depends(require_admin)
+    keyword: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
 ):
-    return list_users(db)
+    return list_users(db, keyword=keyword, limit=limit)
 
 
 @router.get("/ds-config", response_model=DSConfigRead)

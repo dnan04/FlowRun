@@ -29,7 +29,7 @@ def is_report_user_source_configured() -> bool:
     return bool(settings.report_user_sqlalchemy_url)
 
 
-def list_report_users() -> list[ReportUser]:
+def list_report_users(keyword: str | None = None, limit: int | None = None) -> list[ReportUser]:
     if not settings.report_user_sqlalchemy_url:
         return []
 
@@ -39,18 +39,41 @@ def list_report_users() -> list[ReportUser]:
     username_column = _quote_identifier(settings.report_user_username_column.strip())
     fullname_column = _quote_identifier(settings.report_user_fullname_column.strip())
     email_column = _quote_identifier(settings.report_user_email_column.strip())
+    filters = [
+        f"{email_column} IS NOT NULL",
+        f"btrim({email_column}) <> ''",
+    ]
+    params: dict[str, object] = {}
+    keyword_text = (keyword or "").strip().lower()
+    if keyword_text:
+        filters.append(
+            "("
+            f"lower({username_column}) LIKE :keyword OR "
+            f"lower({fullname_column}) LIKE :keyword OR "
+            f"lower({email_column}) LIKE :keyword"
+            ")"
+        )
+        params["keyword"] = f"%{keyword_text}%"
+
+    limit_clause = ""
+    if limit is not None:
+        safe_limit = min(max(limit, 1), 200)
+        limit_clause = " LIMIT :limit"
+        params["limit"] = safe_limit
+
     sql = text(
         f"SELECT {username_column} AS username, "
         f"{fullname_column} AS fullname, "
         f"{email_column} AS email "
         f"FROM {relation_name} "
-        f"WHERE {email_column} IS NOT NULL AND btrim({email_column}) <> '' "
+        f"WHERE {' AND '.join(filters)} "
         f"ORDER BY {fullname_column}, {email_column}"
+        f"{limit_clause}"
     )
     engine = create_engine(settings.report_user_sqlalchemy_url, pool_pre_ping=True)
     try:
         with engine.connect() as connection:
-            rows = connection.execute(sql).mappings().all()
+            rows = connection.execute(sql, params).mappings().all()
     finally:
         engine.dispose()
 
@@ -67,7 +90,7 @@ def list_report_users() -> list[ReportUser]:
     return users
 
 
-def list_report_user_options() -> list[SimpleUserRead]:
+def list_report_user_options(keyword: str | None = None, limit: int = 50) -> list[SimpleUserRead]:
     return [
         SimpleUserRead(
             id=user.email,
@@ -75,7 +98,7 @@ def list_report_user_options() -> list[SimpleUserRead]:
             fullname=user.fullname,
             email=user.email,
         )
-        for user in list_report_users()
+        for user in list_report_users(keyword=keyword, limit=limit)
     ]
 
 

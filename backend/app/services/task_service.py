@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.current_user import CurrentUser
@@ -10,6 +11,8 @@ from app.models.execution import TaskExecution
 from app.models.task import TaskDefinition, TaskDirectory, task_execute_user, task_notify_user, task_visible_user
 from app.models.user import User
 from app.schemas.task import (
+    AdminTaskListItem,
+    AdminTaskPage,
     AdminTaskRead,
     BusinessTaskRead,
     TaskDirectoryCreate,
@@ -83,6 +86,96 @@ def list_all_tasks(db: Session) -> list[AdminTaskRead]:
     )
     schemas = [_to_admin_schema(db, item) for item in tasks]
     return sorted(schemas, key=lambda item: int(item.task_code))
+
+
+def list_admin_tasks(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    keyword: str | None = None,
+    engine_type: str | None = None,
+    directory_id: int | None = None,
+    uncategorized: bool = False,
+) -> AdminTaskPage:
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+    query = db.query(TaskDefinition).options(selectinload(TaskDefinition.directory))
+
+    keyword_text = (keyword or "").strip()
+    if keyword_text:
+        pattern = f"%{keyword_text}%"
+        query = query.filter(
+            or_(
+                TaskDefinition.display_name.ilike(pattern),
+                TaskDefinition.task_code.ilike(pattern),
+            )
+        )
+
+    engine_text = (engine_type or "").strip().upper()
+    if engine_text in {"DS", "PG"}:
+        query = query.filter(TaskDefinition.engine_type == engine_text)
+
+    if uncategorized:
+        query = query.filter(TaskDefinition.directory_id.is_(None))
+    elif directory_id is not None:
+        directory_ids = _collect_directory_ids(db, directory_id)
+        query = query.filter(TaskDefinition.directory_id.in_(directory_ids))
+
+    total = query.count()
+    tasks = (
+        query
+        .order_by(TaskDefinition.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return AdminTaskPage(
+        items=[_to_admin_list_item(item) for item in tasks],
+        total=total,
+        page=page,
+        pageSize=page_size,
+    )
+
+
+def get_admin_task(db: Session, task_id: int) -> AdminTaskRead:
+    task = (
+        db.query(TaskDefinition)
+        .options(selectinload(TaskDefinition.directory))
+        .filter(TaskDefinition.id == task_id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="任务不存在。")
+    return _to_admin_schema(db, task)
+
+
+def list_available_tasks_for_center(
+    db: Session,
+    *,
+    keyword: str | None = None,
+    limit: int = 100,
+) -> list[AdminTaskListItem]:
+    limit = min(max(limit, 1), 200)
+    query = (
+        db.query(TaskDefinition)
+        .options(selectinload(TaskDefinition.directory))
+        .filter(
+            TaskDefinition.published.is_(True),
+            TaskDefinition.in_task_center.is_(False),
+        )
+    )
+    keyword_text = (keyword or "").strip()
+    if keyword_text:
+        pattern = f"%{keyword_text}%"
+        query = query.filter(
+            or_(
+                TaskDefinition.display_name.ilike(pattern),
+                TaskDefinition.task_code.ilike(pattern),
+            )
+        )
+    tasks = query.order_by(TaskDefinition.id.asc()).limit(limit).all()
+    return [_to_admin_list_item(item) for item in tasks]
 
 
 def list_task_directories(db: Session) -> list[TaskDirectoryRead]:
@@ -623,6 +716,13 @@ def _to_admin_schema(db: Session, item: TaskDefinition) -> AdminTaskRead:
     schema.visible_user_emails = [person["email"] for person in _get_task_people(db, item.id, task_visible_user)]
     schema.executable_user_emails = [person["email"] for person in _get_task_people(db, item.id, task_execute_user)]
     schema.notify_user_emails = [person["email"] for person in _get_task_people(db, item.id, task_notify_user)]
+    return schema
+
+
+def _to_admin_list_item(item: TaskDefinition) -> AdminTaskListItem:
+    schema = AdminTaskListItem.model_validate(item)
+    schema.directory_name = item.directory.directory_name if item.directory else None
+    schema.directory_path = _build_directory_path(item.directory) if item.directory else None
     return schema
 
 

@@ -84,6 +84,30 @@ class AdminTaskRead(BaseModel):
     updated_at: datetime = Field(alias="updatedAt")
 
 
+class AdminTaskListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    directory_id: int | None = Field(default=None, alias="directoryId")
+    directory_name: str | None = Field(default=None, alias="directoryName")
+    directory_path: str | None = Field(default=None, alias="directoryPath")
+    task_code: str = Field(alias="taskCode")
+    display_name: str = Field(alias="displayName")
+    engine_type: str = Field(alias="engineType")
+    published: bool
+    in_task_center: bool = Field(alias="inTaskCenter")
+    last_test_success: bool | None = Field(default=None, alias="lastTestSuccess")
+
+
+class AdminTaskPage(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[AdminTaskListItem]
+    total: int
+    page: int
+    page_size: int = Field(alias="pageSize")
+
+
 class WorkflowTestSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

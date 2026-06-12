@@ -308,7 +308,17 @@
         </template>
 
         <el-form-item label="失败联系人">
-          <el-select v-model="form.notifyUserEmails" multiple filterable :reserve-keyword="false" style="width: 100%">
+          <el-select
+            v-model="form.notifyUserEmails"
+            multiple
+            filterable
+            remote
+            :remote-method="searchUsers"
+            :loading="loadingUsers"
+            :reserve-keyword="false"
+            style="width: 100%"
+            @focus="loadDefaultUsers"
+          >
             <el-option
               v-for="item in users"
               :key="item.email"
@@ -318,7 +328,17 @@
           </el-select>
         </el-form-item>
         <el-form-item label="可见人员">
-          <el-select v-model="form.visibleUserEmails" multiple filterable :reserve-keyword="false" style="width: 100%">
+          <el-select
+            v-model="form.visibleUserEmails"
+            multiple
+            filterable
+            remote
+            :remote-method="searchUsers"
+            :loading="loadingUsers"
+            :reserve-keyword="false"
+            style="width: 100%"
+            @focus="loadDefaultUsers"
+          >
             <el-option
               v-for="item in users"
               :key="item.email"
@@ -328,7 +348,17 @@
           </el-select>
         </el-form-item>
         <el-form-item label="可执行人员">
-          <el-select v-model="form.executableUserEmails" multiple filterable :reserve-keyword="false" style="width: 100%">
+          <el-select
+            v-model="form.executableUserEmails"
+            multiple
+            filterable
+            remote
+            :remote-method="searchUsers"
+            :loading="loadingUsers"
+            :reserve-keyword="false"
+            style="width: 100%"
+            @focus="loadDefaultUsers"
+          >
             <el-option
               v-for="item in users"
               :key="item.email"
@@ -384,7 +414,21 @@
         </div>
       </template>
       <div class="configured-task-layout">
-        <el-table :data="filteredTasks" class="task-table" table-layout="fixed">
+        <div class="task-list-toolbar">
+          <el-input
+            v-model="taskKeyword"
+            clearable
+            placeholder="搜索任务名称/编码"
+            @keyup.enter="searchTasks"
+            @clear="searchTasks"
+          />
+          <el-select v-model="taskEngineType" clearable placeholder="执行方式" @change="searchTasks">
+            <el-option label="DS 工作流" value="DS" />
+            <el-option label="PG 存储过程" value="PG" />
+          </el-select>
+          <el-button type="primary" @click="searchTasks">搜索</el-button>
+        </div>
+        <el-table :data="filteredTasks" class="task-table" table-layout="fixed" v-loading="loadingTasks">
           <el-table-column prop="taskCode" label="编码" width="42" />
           <el-table-column label="目录" width="94" show-overflow-tooltip>
             <template #default="{ row }">{{ formatDirectoryName(row.directoryPath || row.directoryName) }}</template>
@@ -414,6 +458,16 @@
             </template>
           </el-table-column>
         </el-table>
+        <el-pagination
+          v-model:current-page="taskPage"
+          v-model:page-size="taskPageSize"
+          class="task-pagination"
+          layout="total, sizes, prev, pager, next"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="taskTotal"
+          @current-change="loadTasks"
+          @size-change="handleTaskPageSizeChange"
+        />
       </div>
     </el-card>
 
@@ -435,7 +489,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api/http'
 import DirectoryTreePanel from '../components/DirectoryTreePanel.vue'
@@ -445,14 +499,22 @@ type TaskRow = Record<string, any>
 const DEFAULT_PG_TEMPLATE = ''
 const DEFAULT_DS_START_PARAMS = ''
 const DS_START_PARAMS_PLACEHOLDER = '默认空。填写 JSON 对象，例如 {"businessDate":"2026-05-07","region":"asia"}'
+const LONG_RUNNING_REQUEST_CONFIG = { timeout: 0 }
 
 const users = ref<any[]>([])
 const tasks = ref<TaskRow[]>([])
+const loadingTasks = ref(false)
+const taskTotal = ref(0)
+const taskPage = ref(1)
+const taskPageSize = ref(20)
+const taskKeyword = ref('')
+const taskEngineType = ref('')
 const directories = ref<any[]>([])
 const selectedDirectoryId = ref<number | 'all' | null>('all')
 const directoryDialogVisible = ref(false)
 const creatingDirectory = ref(false)
 const deletingDirectoryId = ref<number | null>(null)
+const loadingUsers = ref(false)
 const newDirectoryName = ref('')
 const newDirectoryParentId = ref<number | null>(null)
 const saving = ref(false)
@@ -515,14 +577,7 @@ const form = reactive(createInitialForm())
 const isDsTask = computed(() => form.engineType === 'DS')
 
 const filteredTasks = computed(() => {
-  if (selectedDirectoryId.value === 'all') {
-    return tasks.value
-  }
-  if (selectedDirectoryId.value === null) {
-    return tasks.value.filter((task) => (task.directoryId ?? null) === null)
-  }
-  const directoryIds = collectDirectoryIds(selectedDirectoryId.value)
-  return tasks.value.filter((task) => directoryIds.includes(task.directoryId))
+  return tasks.value
 })
 
 const directorySelectOptions = computed(() => directories.value.map((directory) => ({
@@ -559,13 +614,7 @@ const newDirectoryParentName = computed(() => {
 })
 
 const nextTaskCode = computed(() => {
-  if (!tasks.value.length) {
-    return '1'
-  }
-  const codes = tasks.value
-    .map((item) => Number(item.taskCode))
-    .filter((value) => Number.isFinite(value))
-  return `${(codes.length ? Math.max(...codes) : 0) + 1}`
+  return `${taskTotal.value + 1}`
 })
 
 const publishDisabled = computed(() => !lastTestPassed.value || testedDraftSignature.value !== currentDraftSignature.value)
@@ -625,13 +674,117 @@ const resetForm = () => {
 }
 
 const loadTasks = async () => {
-  const { data } = await http.get('/admin/tasks')
-  tasks.value = data
+  loadingTasks.value = true
+  try {
+    const params: Record<string, any> = {
+      page: taskPage.value,
+      pageSize: taskPageSize.value
+    }
+    const keyword = taskKeyword.value.trim()
+    if (keyword) {
+      params.keyword = keyword
+    }
+    if (taskEngineType.value) {
+      params.engineType = taskEngineType.value
+    }
+    if (selectedDirectoryId.value === null) {
+      params.uncategorized = true
+    } else if (typeof selectedDirectoryId.value === 'number') {
+      params.directoryId = selectedDirectoryId.value
+    }
+    const { data } = await http.get('/admin/tasks', { params })
+    tasks.value = data.items || []
+    taskTotal.value = data.total || 0
+    taskPage.value = data.page || taskPage.value
+    taskPageSize.value = data.pageSize || taskPageSize.value
+  } finally {
+    loadingTasks.value = false
+  }
 }
 
-const loadUsers = async () => {
-  const { data } = await http.get('/admin/users')
-  users.value = data
+const searchTasks = async () => {
+  taskPage.value = 1
+  await loadTasks()
+}
+
+const handleTaskPageSizeChange = async () => {
+  taskPage.value = 1
+  await loadTasks()
+}
+
+const mergeUsers = (items: any[]) => {
+  const userMap = new Map(users.value.map((user) => [user.email || user.username, user]))
+  items.forEach((item) => {
+    const key = item.email || item.username
+    if (key) {
+      userMap.set(key, item)
+    }
+  })
+  users.value = Array.from(userMap.values())
+}
+
+const getSelectedUserEmails = () => [
+  ...form.notifyUserEmails,
+  ...form.visibleUserEmails,
+  ...form.executableUserEmails
+].filter(Boolean)
+
+const fetchUsers = async (keyword = '') => {
+  const { data } = await http.get('/admin/users', {
+    params: {
+      keyword: keyword.trim() || undefined,
+      limit: 50
+    }
+  })
+  return data || []
+}
+
+const setUserSearchOptions = (items: any[]) => {
+  const selectedEmails = new Set(getSelectedUserEmails())
+  const currentUserMap = new Map(users.value.map((user) => [user.email || user.username, user]))
+  const resultKeys = new Set(items.map((user) => user.email || user.username).filter(Boolean))
+  const selectedUsers = Array.from(selectedEmails)
+    .filter((email) => !resultKeys.has(email))
+    .map((email) => currentUserMap.get(email) || { id: email, username: email, email, fullname: email })
+  users.value = [...items, ...selectedUsers]
+}
+
+const searchUsers = async (keyword = '') => {
+  loadingUsers.value = true
+  try {
+    const items = await fetchUsers(keyword)
+    setUserSearchOptions(items)
+  } finally {
+    loadingUsers.value = false
+  }
+}
+
+const loadDefaultUsers = async () => {
+  if (!users.value.length) {
+    await searchUsers('')
+  }
+}
+
+const ensureUserOptions = async (emails: string[]) => {
+  const existing = new Set(users.value.map((user) => user.email || user.username))
+  const missing = Array.from(new Set(emails.filter(Boolean))).filter((email) => !existing.has(email))
+  for (const email of missing) {
+    mergeUsers(await fetchUsers(email))
+  }
+  const nextExisting = new Set(users.value.map((user) => user.email || user.username))
+  mergeUsers(
+    missing
+      .filter((email) => !nextExisting.has(email))
+      .map((email) => ({ id: email, username: email, email, fullname: email }))
+  )
+}
+
+const ensureTaskUserOptions = async (row: TaskRow) => {
+  await ensureUserOptions([
+    ...(row.notifyUserEmails || []),
+    ...(row.visibleUserEmails || []),
+    ...(row.executableUserEmails || [])
+  ])
 }
 
 const formatUserOption = (user: any) => {
@@ -913,8 +1066,14 @@ const syncFormFromTask = (row: TaskRow) => {
   testedDraftSignature.value = lastTestPassed.value ? currentDraftSignature.value : ''
 }
 
-const editTask = (row: TaskRow) => {
-  syncFormFromTask(row)
+const editTask = async (row: TaskRow) => {
+  try {
+    const { data } = await http.get(`/admin/tasks/${row.id}`)
+    await ensureTaskUserOptions(data)
+    syncFormFromTask(data)
+  } catch (error: any) {
+    ElMessage.error(formatRequestError(error, '加载任务详情失败'))
+  }
 }
 
 const saveTask = async () => {
@@ -923,6 +1082,7 @@ const saveTask = async () => {
     const { data } = await http.post('/admin/tasks', buildPayload(false))
     ElMessage.success('任务配置保存成功')
     await loadTasks()
+    await ensureTaskUserOptions(data)
     syncFormFromTask(data)
   } catch (error: any) {
     ElMessage.error(formatRequestError(error, '保存失败，请检查表单和 JSON 配置'))
@@ -934,7 +1094,7 @@ const saveTask = async () => {
 const testTask = async () => {
   try {
     testing.value = true
-    const { data } = await http.post('/admin/tasks/test-execution', buildPayload(false))
+    const { data } = await http.post('/admin/tasks/test-execution', buildPayload(false), LONG_RUNNING_REQUEST_CONFIG)
     testResult.value = data
     lastTestPassed.value = Boolean(data.success)
     testedDraftSignature.value = data.success ? currentDraftSignature.value : ''
@@ -958,6 +1118,7 @@ const publishTask = async () => {
     const { data } = await http.post('/admin/tasks', buildPayload(true))
     ElMessage.success('任务已发布到任务中心')
     await loadTasks()
+    await ensureTaskUserOptions(data)
     syncFormFromTask(data)
   } catch (error: any) {
     ElMessage.error(formatRequestError(error, '发布失败，请先对当前配置执行测试并成功'))
@@ -985,8 +1146,13 @@ const removeTask = async (row: TaskRow) => {
   }
 }
 
+watch(selectedDirectoryId, async () => {
+  taskPage.value = 1
+  await loadTasks()
+})
+
 onMounted(async () => {
-  await Promise.all([loadTasks(), loadUsers(), loadDirectories(), loadDsConfig(), loadDsOptions()])
+  await Promise.all([loadTasks(), loadDirectories(), loadDsConfig(), loadDsOptions()])
   resetForm()
 })
 </script>
@@ -1080,7 +1246,20 @@ onMounted(async () => {
 }
 
 .configured-task-layout {
+  display: grid;
+  gap: 10px;
   min-width: 0;
+}
+
+.task-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-pagination {
+  justify-content: flex-end;
 }
 
 .configured-tasks-card :deep(.el-card__body) {
