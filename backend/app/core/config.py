@@ -1,6 +1,17 @@
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from urllib.parse import quote_plus
+
+
+def _strip_inline_env_comment(value):
+    if not isinstance(value, str):
+        return value
+    for marker in (" #", "\t#"):
+        index = value.find(marker)
+        if index != -1:
+            value = value[:index]
+            break
+    return value.strip()
 
 
 class Settings(BaseSettings):
@@ -57,6 +68,11 @@ class Settings(BaseSettings):
     dolphinscheduler_exec_type: str = "START_PROCESS"
     dolphinscheduler_environment_code: str = ""
     dolphinscheduler_warning_group_id: str = ""
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_inline_env_comments(cls, value):
+        return _strip_inline_env_comment(value)
 
     @property
     def pg_execution_sqlalchemy_url(self) -> str:

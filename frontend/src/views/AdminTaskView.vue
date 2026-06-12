@@ -146,7 +146,7 @@
             </el-col>
             <el-col :span="12">
               <el-form-item>
-                <template #label><span><span class="required-mark">*</span>projectCode</span></template>
+                <template #label><span><span class="required-mark">*</span>项目名称(projectCode)</span></template>
                 <el-select v-model="form.dsProjectCode" filterable placeholder="请选择项目" style="width: 100%">
                   <el-option
                     v-for="option in dsOptions.projects"
@@ -162,7 +162,7 @@
           <el-row :gutter="14">
             <el-col :span="12">
               <el-form-item>
-                <template #label><span><span class="required-mark">*</span>failureStrategy</span></template>
+                <template #label><span><span class="required-mark">*</span>失败策略(failureStrategy)</span></template>
                 <el-select v-model="form.dsFailureStrategy" style="width: 100%">
                   <el-option label="CONTINUE" value="CONTINUE" />
                   <el-option label="END" value="END" />
@@ -171,7 +171,7 @@
             </el-col>
             <el-col :span="12">
               <el-form-item>
-                <template #label><span><span class="required-mark">*</span>processInstancePriority</span></template>
+                <template #label><span><span class="required-mark">*</span>流程优先级(processInstancePriority)</span></template>
                 <el-select v-model="form.dsProcessInstancePriority" style="width: 100%">
                   <el-option label="HIGHEST" value="HIGHEST" />
                   <el-option label="HIGH" value="HIGH" />
@@ -183,7 +183,7 @@
             </el-col>
             <el-col :span="12">
               <el-form-item>
-                <template #label><span><span class="required-mark">*</span>warningType</span></template>
+                <template #label><span><span class="required-mark">*</span>通知策略(warningType)</span></template>
                 <el-select v-model="form.dsWarningType" style="width: 100%">
                   <el-option label="NONE" value="NONE" />
                   <el-option label="SUCCESS" value="SUCCESS" />
@@ -194,7 +194,7 @@
             </el-col>
             <el-col :span="12">
               <el-form-item>
-                <template #label><span><span class="required-mark">*</span>workerGroup</span></template>
+                <template #label><span><span class="required-mark">*</span>Worker分组(workerGroup)</span></template>
                 <el-input v-model="form.dsWorkerGroup" disabled />
               </el-form-item>
             </el-col>
@@ -203,13 +203,13 @@
           <el-row :gutter="14">
             <el-col :span="12">
               <el-form-item>
-                <template #label><span><span class="required-mark">*</span>execType</span></template>
+                <template #label><span><span class="required-mark">*</span>执行类型(execType)</span></template>
                 <el-input v-model="form.dsExecType" disabled />
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item>
-                <template #label><span>startParams(JSON)</span></template>
+                <template #label><span>启动参数(startParams(JSON))</span></template>
                 <el-input v-model="dsStartParamsText" type="textarea" :rows="2" :placeholder="DS_START_PARAMS_PLACEHOLDER" />
               </el-form-item>
             </el-col>
@@ -217,7 +217,7 @@
 
           <el-row :gutter="14">
             <el-col :span="12">
-              <el-form-item label="environmentCode">
+              <el-form-item label="环境名称(environmentCode)">
                 <el-select
                   v-model="form.dsEnvironmentCode"
                   clearable
@@ -235,7 +235,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="warningGroupId">
+              <el-form-item label="告警组(warningGroup)">
                 <el-select
                   v-model="form.dsWarningGroupId"
                   clearable

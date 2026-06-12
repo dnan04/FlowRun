@@ -28,7 +28,7 @@ def _get_or_create_login_user(db: Session, username: str) -> tuple[CurrentUser, 
         return current_user_from_report(report_user), f"user:{report_user.email}"
 
     existing_user = db.query(User).filter(User.username == username).first()
-    is_admin = username == "fine_manager" or existing_user is not None
+    is_admin = username == "finereport_manage" or existing_user is not None
     if not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前用户不在可登录人员视图中")
 
