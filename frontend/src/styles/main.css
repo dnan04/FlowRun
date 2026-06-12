@@ -1,0 +1,101 @@
+:root {
+  --bg: #f3f6fb;
+  --panel: #ffffff;
+  --panel-border: #e8eef7;
+  --text: #1f2d3d;
+  --muted: #7b8aa3;
+  --brand: #2f66e8;
+  --brand-soft: #eaf2ff;
+  --accent: #58b85b;
+  --line: #e9eef6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1280px;
+  color: var(--text);
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  background: var(--bg);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page-shell {
+  min-height: 100vh;
+  padding: 0;
+}
+
+.glass-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 6px 18px rgba(31, 45, 61, 0.07);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.meta-text {
+  color: var(--muted);
+}
+
+.page-header {
+  min-height: 56px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--brand);
+  --el-button-border-color: var(--brand);
+  --el-button-hover-bg-color: #2459d8;
+  --el-button-hover-border-color: #2459d8;
+}
+
+.el-card {
+  --el-card-border-radius: 12px;
+}
+
+.el-card__header {
+  border-bottom-color: var(--line);
+}
+
+.el-table {
+  --el-table-header-bg-color: #f7f9fc;
+  --el-table-border-color: var(--line);
+  --el-table-row-hover-bg-color: #f7fbff;
+  color: #344056;
+}
+
+.el-table th.el-table__cell {
+  color: #40516b;
+  font-weight: 700;
+}
+
+.el-tag {
+  border-radius: 999px;
+}
+
+@media (max-width: 1280px) {
+  body {
+    min-width: 100%;
+  }
+}

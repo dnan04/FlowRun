@@ -1,0 +1,20 @@
+# Python 缓存和本地虚拟环境
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.venv/
+
+# 本地环境变量配置，服务器需单独配置
+.env
+backend/.env
+
+# 本地数据备份文件
+# platform_data_backup.dump
+
+# 后端/前端运行日志
+backend/*.log
+frontend/*.log
+
+# 前端依赖和构建产物，可通过 npm install / npm run build 重新生成
+node_modules/
+dist/
