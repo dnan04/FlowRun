@@ -1,0 +1,13 @@
+services:
+  flowrun:
+    build:
+      context: .
+    image: flowrun:latest
+    container_name: flowrun
+    env_file:
+      - backend/.env
+    ports:
+      - "5002:80"
+    restart: unless-stopped
+    mem_limit: 3g
+    memswap_limit: 3g

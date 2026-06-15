@@ -1,6 +1,4 @@
 .git
-.agents
-.codex
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -15,6 +13,3 @@ frontend/*.log
 .env
 backend/.env
 platform_data_backup.dump
-业务自助跑数平台建设方案.md
-平台数据迁移指南.md
-执行调用.md

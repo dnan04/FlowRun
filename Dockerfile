@@ -33,7 +33,8 @@ RUN apt-get update \
 
 COPY backend/requirements.txt /app/backend/requirements.txt
 # 优化 3：使用阿里云 pip 镜像源加速 Python 依赖包下载
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r /app/backend/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://mirrors.aliyun.com/pypi/simple/ -r /app/backend/requirements.txt
 
 COPY backend/app /app/backend/app
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
