@@ -1040,6 +1040,7 @@ const syncFormFromTask = (row: TaskRow) => {
   const parameterTemplate = row.parameterTemplate || {}
   Object.assign(form, createInitialForm(), {
     ...row,
+    repeatWindowMinutes: row.repeatWindowMinutes && row.repeatWindowMinutes > 0 ? row.repeatWindowMinutes : undefined,
     dsProjectCode: parameterTemplate.projectCode || dsDefaults.defaultProjectCode,
     dsFailureStrategy: parameterTemplate.failureStrategy || dsDefaults.failureStrategy,
     dsProcessInstancePriority: parameterTemplate.processInstancePriority || dsDefaults.processInstancePriority,

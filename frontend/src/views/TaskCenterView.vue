@@ -92,7 +92,7 @@
             <div class="task-actions">
               <el-button
                 type="primary"
-                :disabled="!canExecuteTask(task)"
+                :disabled="!canExecuteTask(task) || isExecuteClickLocked(task.id) || runningId === task.id"
                 :loading="runningId === task.id"
                 :title="getExecuteDisabledReason(task)"
                 @click="runTask(task)"
@@ -237,6 +237,8 @@ const taskLogs = ref<any[]>([])
 const auth = useAuthStore()
 const DEFAULT_LOG_LIMIT = 10
 const LONG_RUNNING_REQUEST_CONFIG = { timeout: 0 }
+const EXECUTE_CLICK_LOCK_MS = 3000
+const executeClickLockedTaskIds = ref<Set<number>>(new Set())
 
 const filteredTasks = computed(() => {
   if (selectedDirectoryId.value === 'all') {
@@ -358,7 +360,23 @@ const canExecuteTask = (task: any) => {
   return auth.isAdmin || task.canExecute === true
 }
 
+const isExecuteClickLocked = (taskId: number) => {
+  return executeClickLockedTaskIds.value.has(taskId)
+}
+
+const lockExecuteClick = (taskId: number) => {
+  executeClickLockedTaskIds.value = new Set([...executeClickLockedTaskIds.value, taskId])
+  window.setTimeout(() => {
+    const nextLockedTaskIds = new Set(executeClickLockedTaskIds.value)
+    nextLockedTaskIds.delete(taskId)
+    executeClickLockedTaskIds.value = nextLockedTaskIds
+  }, EXECUTE_CLICK_LOCK_MS)
+}
+
 const getExecuteDisabledReason = (task: any) => {
+  if (isExecuteClickLocked(task.id)) {
+    return '请勿重复点击，3 秒后可再次执行'
+  }
   if (canExecuteTask(task)) {
     return ''
   }
@@ -539,6 +557,11 @@ const runTask = async (task: any) => {
     return
   }
   const taskId = task.id
+  if (isExecuteClickLocked(taskId)) {
+    ElMessage.warning('请勿重复点击，3 秒后可再次执行')
+    return
+  }
+  lockExecuteClick(taskId)
   try {
     runningId.value = taskId
     executionResultTaskName.value = task.display_name || ''

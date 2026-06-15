@@ -11,6 +11,9 @@ backend/.env
 # 本地数据备份文件
 # platform_data_backup.dump
 
+# 本地文档草稿
+系统介绍.md
+
 # 后端/前端运行日志
 backend/*.log
 frontend/*.log
