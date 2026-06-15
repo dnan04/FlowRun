@@ -48,7 +48,7 @@ def execute_pg_task_with_job_instance_name(
     execute_pg_procedure(rendered_procedure)
     if callback_method and callback_method.strip():
         execute_pg_method_with_job_instance_name(callback_method.strip(), job_instance_name)
-    return job_instance_name, "成功"
+    return job_instance_name, f"成功，{job_instance_name}"
 
 
 def get_visible_tasks(db: Session, user: CurrentUser | User) -> list[BusinessTaskRead]:

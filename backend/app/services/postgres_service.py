@@ -52,7 +52,7 @@ def execute_pg_task_with_job_instance_name(
     if callback_method and callback_method.strip():
         execute_pg_method_with_job_instance_name(callback_method.strip(), job_instance_name)
 
-    return job_instance_name, "成功"
+    return job_instance_name, f"成功，{job_instance_name}"
 
 
 def build_job_instance_name(prefix: str | None = None) -> str:

@@ -225,6 +225,7 @@ const logDialogVisible = ref(false)
 const executionResultVisible = ref(false)
 const executionResult = ref<any | null>(null)
 const executionResultTaskName = ref('')
+const activeExecutionId = ref<number | null>(null)
 const resultPolling = ref(false)
 const directoryDialogVisible = ref(false)
 const creatingDirectory = ref(false)
@@ -562,19 +563,26 @@ const runTask = async (task: any) => {
     return
   }
   lockExecuteClick(taskId)
+  let submittedExecutionId: number | null = null
   try {
     runningId.value = taskId
     executionResultTaskName.value = task.display_name || ''
     executionResultVisible.value = true
     resultPolling.value = true
     const { data } = await http.post(`/tasks/${taskId}/execute`, {}, LONG_RUNNING_REQUEST_CONFIG)
+    submittedExecutionId = data.id
     executionResult.value = data
+    activeExecutionId.value = data.id
+    runningId.value = null
     ElMessage.success('任务已提交，平台正在执行')
     await waitForExecutionResult(taskId, data.id)
     await loadAll()
   } catch (error: any) {
-    resultPolling.value = false
-    ElMessage.error(error?.response?.data?.detail || '执行失败')
+    if (submittedExecutionId === null || activeExecutionId.value === submittedExecutionId) {
+      resultPolling.value = false
+      activeExecutionId.value = null
+      ElMessage.error(error?.response?.data?.detail || '执行失败')
+    }
   } finally {
     runningId.value = null
   }
@@ -587,12 +595,18 @@ const waitForExecutionResult = async (taskId: number, executionId: number) => {
     const { data } = await http.get(`/tasks/${taskId}/executions`, LONG_RUNNING_REQUEST_CONFIG)
     const latest = data.find((item: any) => item.id === executionId)
     if (latest) {
-      executionResult.value = latest
+      const isActiveExecution = activeExecutionId.value === executionId
+      if (isActiveExecution) {
+        executionResult.value = latest
+      }
       if (terminalStatuses.has(latest.execution_status)) {
-        resultPolling.value = false
-        latest.execution_status === 'SUCCEEDED'
-          ? ElMessage.success('任务执行成功')
-          : ElMessage.error(latest.error_summary || '任务执行失败')
+        if (isActiveExecution) {
+          resultPolling.value = false
+          activeExecutionId.value = null
+          latest.execution_status === 'SUCCEEDED'
+            ? ElMessage.success('任务执行成功')
+            : ElMessage.error(latest.error_summary || '任务执行失败')
+        }
         return
       }
     }
