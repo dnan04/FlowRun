@@ -18,7 +18,8 @@ FROM docker.m.daocloud.io/library/python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     BACKEND_HOST=127.0.0.1 \
-    BACKEND_PORT=8000
+    BACKEND_PORT=8000 \
+    TZ=Asia/Shanghai
 
 WORKDIR /app
 
