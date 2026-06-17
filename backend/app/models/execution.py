@@ -17,7 +17,7 @@ class TaskExecution(Base):
     requested_by_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     requested_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     engine_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    engine_target: Mapped[str] = mapped_column(String(128), nullable=False)
+    engine_target: Mapped[str] = mapped_column(Text, nullable=False)
     request_parameters: Mapped[dict] = mapped_column(JSON, default=dict)
     execution_status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
     external_instance_id: Mapped[str | None] = mapped_column(String(255))

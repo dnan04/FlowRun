@@ -36,7 +36,7 @@
           <el-card v-for="task in filteredTasks" :key="task.id" class="glass-card task-card">
             <template #header>
               <div class="task-header">
-                <div class="task-title">{{ task.display_name }}</div>
+                <div class="task-title" :title="task.display_name">{{ task.display_name }}</div>
                 <div class="task-card-tools">
                   <el-button
                     text

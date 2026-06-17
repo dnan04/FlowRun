@@ -49,7 +49,7 @@ class TaskDefinition(Base):
     estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failure_contact: Mapped[str | None] = mapped_column(String(128), nullable=True)
     engine_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    engine_target: Mapped[str] = mapped_column(String(128), nullable=False)
+    engine_target: Mapped[str] = mapped_column(Text, nullable=False)
     ds_callback_method: Mapped[str | None] = mapped_column(Text, nullable=True)
     pg_callback_method: Mapped[str | None] = mapped_column(Text, nullable=True)
     parameter_template: Mapped[dict] = mapped_column(JSON, default=dict)

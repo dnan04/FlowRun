@@ -63,7 +63,16 @@ def ensure_runtime_schema():
                 f"ALTER TABLE {table_sql('sys_admin_user')} ADD COLUMN updated_at {datetime_type} DEFAULT CURRENT_TIMESTAMP NOT NULL"
             )
     if "dr_task_definition" in tables:
-        task_columns = {column["name"] for column in inspector.get_columns("dr_task_definition", schema=schema_name)}
+        raw_task_columns = inspector.get_columns("dr_task_definition", schema=schema_name)
+        task_columns = {column["name"] for column in raw_task_columns}
+        
+        # Check if engine_target needs to be updated to TEXT
+        engine_target_col = next((c for c in raw_task_columns if c["name"] == "engine_target"), None)
+        if engine_target_col and getattr(engine_target_col["type"], "length", None) is not None:
+            alter_statements.append(
+                f"ALTER TABLE {table_sql('dr_task_definition')} ALTER COLUMN engine_target TYPE TEXT"
+            )
+
         if "directory_id" not in task_columns:
             alter_statements.append(
                 f"ALTER TABLE {table_sql('dr_task_definition')} ADD COLUMN directory_id INTEGER"
@@ -136,7 +145,16 @@ def ensure_runtime_schema():
                 )
 
     if "dr_task_execution" in record_tables:
-        execution_columns = {column["name"] for column in inspector.get_columns("dr_task_execution", schema=record_schema_name)}
+        raw_execution_columns = inspector.get_columns("dr_task_execution", schema=record_schema_name)
+        execution_columns = {column["name"] for column in raw_execution_columns}
+
+        # Check if engine_target needs to be updated to TEXT
+        engine_target_col = next((c for c in raw_execution_columns if c["name"] == "engine_target"), None)
+        if engine_target_col and getattr(engine_target_col["type"], "length", None) is not None:
+            alter_statements.append(
+                f"ALTER TABLE {record_table_sql('dr_task_execution')} ALTER COLUMN engine_target TYPE TEXT"
+            )
+
         if "requested_by_email" not in execution_columns:
             alter_statements.append(
                 f"ALTER TABLE {record_table_sql('dr_task_execution')} ADD COLUMN requested_by_email VARCHAR(255)"
