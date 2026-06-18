@@ -61,6 +61,14 @@ def admin_list_available_tasks_for_center(
     return list_available_tasks_for_center(db, keyword=keyword, limit=limit)
 
 
+@router.get("/tasks/all", response_model=list[AdminTaskRead])
+def admin_list_all_tasks(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return list_all_tasks(db)
+
+
 @router.get("/tasks/{task_id}", response_model=AdminTaskRead)
 def admin_get_task(
     task_id: int,

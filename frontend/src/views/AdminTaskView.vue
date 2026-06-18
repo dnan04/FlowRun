@@ -3,7 +3,7 @@
     <DirectoryTreePanel
       v-model="selectedDirectoryId"
       :directories="directories"
-      :tasks="tasks"
+      :tasks="allTasks"
       can-manage
       :deleting-directory-id="deletingDirectoryId"
       @create="openCreateDirectory"
@@ -504,6 +504,7 @@ const LONG_RUNNING_REQUEST_CONFIG = { timeout: 0 }
 
 const users = ref<any[]>([])
 const tasks = ref<TaskRow[]>([])
+const allTasks = ref<TaskRow[]>([])
 const loadingTasks = ref(false)
 const taskTotal = ref(0)
 const taskPage = ref(1)
@@ -615,7 +616,14 @@ const newDirectoryParentName = computed(() => {
 })
 
 const nextTaskCode = computed(() => {
-  return `${taskTotal.value + 1}`
+  if (!allTasks.value.length) {
+    return '1'
+  }
+  const codes = allTasks.value.map(t => parseInt(t.taskCode, 10)).filter(c => !isNaN(c))
+  if (!codes.length) {
+    return '1'
+  }
+  return `${Math.max(...codes) + 1}`
 })
 
 const publishDisabled = computed(() => !lastTestPassed.value || testedDraftSignature.value !== currentDraftSignature.value)
@@ -812,6 +820,15 @@ const loadDirectories = async () => {
   directories.value = data
 }
 
+const loadAllTasks = async () => {
+  try {
+    const { data } = await http.get('/admin/tasks/all')
+    allTasks.value = data || []
+  } catch (error) {
+    console.error(error)
+  }
+}
+
 const loadDsConfig = async () => {
   const { data } = await http.get('/admin/ds-config')
   dsDefaults.defaultProjectCode = data.defaultProjectCode || ''
@@ -986,7 +1003,7 @@ const deleteDirectory = async (directory: any) => {
     if (typeof selectedDirectoryId.value === 'number' && deletedDirectoryIds.includes(selectedDirectoryId.value)) {
       selectedDirectoryId.value = 'all'
     }
-    await Promise.all([loadDirectories(), loadTasks()])
+    await Promise.all([loadDirectories(), loadTasks(), loadAllTasks()])
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') {
       return
@@ -1125,7 +1142,7 @@ const saveTask = async () => {
     saving.value = true
     const { data } = await http.post('/admin/tasks', buildPayload(false))
     ElMessage.success('任务配置保存成功')
-    await loadTasks()
+    await Promise.all([loadTasks(), loadAllTasks()])
     await ensureTaskUserOptions(data)
     syncFormFromTask(data)
   } catch (error: any) {
@@ -1163,7 +1180,7 @@ const publishTask = async () => {
     publishing.value = true
     const { data } = await http.post('/admin/tasks', buildPayload(true))
     ElMessage.success('任务已发布到任务中心')
-    await loadTasks()
+    await Promise.all([loadTasks(), loadAllTasks()])
     await ensureTaskUserOptions(data)
     syncFormFromTask(data)
   } catch (error: any) {
@@ -1182,7 +1199,7 @@ const removeTask = async (row: TaskRow) => {
     )
     await http.delete(`/admin/tasks/${row.id}`)
     ElMessage.success('任务已删除')
-    await loadTasks()
+    await Promise.all([loadTasks(), loadAllTasks()])
     resetForm()
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') {
@@ -1198,7 +1215,7 @@ watch(selectedDirectoryId, async () => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadTasks(), loadDirectories(), loadDsConfig(), loadDsOptions()])
+  await Promise.all([loadTasks(), loadAllTasks(), loadDirectories(), loadDsConfig(), loadDsOptions()])
   resetForm()
 })
 </script>
