@@ -1,4 +1,4 @@
-﻿import os
+import os
 import uuid
 import unittest
 from datetime import datetime, timedelta
@@ -126,7 +126,7 @@ class TaskCodeRulesTest(unittest.TestCase):
             engineType="PG",
             engineTarget="call proc_hidden_from_admin()",
             parameterTemplate={},
-            repeatWindowMinutes=None,
+            repeatWindowMinutes=30,
             visibleUserEmails=[],
             executableUserEmails=[],
             notifyUserEmails=[],
@@ -167,7 +167,7 @@ class TaskCodeRulesTest(unittest.TestCase):
             failureContact="",
             engineType="DS",
             engineTarget="7",
-            parameterTemplate={"projectCode": "123", "workerGroup": "default"},
+            parameterTemplate={"projectCode": "123", "workerGroup": "default", "environmentCode": "17337510344640"},
             repeatWindowMinutes=30,
             visibleUserEmails=[],
             executableUserEmails=[],
@@ -388,6 +388,7 @@ class TaskCodeRulesTest(unittest.TestCase):
                 "workerGroup": "default",
                 "execType": "START_PROCESS",
                 "startParams": None,
+                "environmentCode": "17337510344640",
             },
             repeatWindowMinutes=30,
             visibleUserEmails=[],

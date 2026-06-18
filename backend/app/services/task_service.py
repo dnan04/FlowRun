@@ -484,9 +484,10 @@ def _persist_task(db: Session, payload: TaskUpsert) -> tuple[TaskDefinition, boo
         )
     engine_target = payload.engine_target.strip()
     if not engine_target:
+        detail_msg = "流程定义编码不能为空。" if payload.engine_type == "DS" else "存储过程不能为空。"
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="执行目标不能为空。",
+            detail=detail_msg,
         )
     if payload.engine_type == "PG":
         try:
@@ -498,6 +499,21 @@ def _persist_task(db: Session, payload: TaskUpsert) -> tuple[TaskDefinition, boo
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(exc),
             ) from exc
+
+    if payload.repeat_window_minutes is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="重复触发窗口不能为空。",
+        )
+
+    if payload.engine_type == "DS":
+        env_code = payload.parameter_template.get("environmentCode")
+        if env_code is None or (isinstance(env_code, str) and not env_code.strip()):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="环境名称不能为空。",
+            )
+
     execution_window_cron = _validate_execution_window_cron(payload.execution_window_cron)
     if is_create:
         task = TaskDefinition(task_code=_get_next_task_code(db))

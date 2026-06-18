@@ -238,7 +238,7 @@ const taskLogs = ref<any[]>([])
 const auth = useAuthStore()
 const DEFAULT_LOG_LIMIT = 10
 const LONG_RUNNING_REQUEST_CONFIG = { timeout: 0 }
-const EXECUTE_CLICK_LOCK_MS = 3000
+const EXECUTE_CLICK_LOCK_MS = 5000
 const executeClickLockedTaskIds = ref<Set<number>>(new Set())
 
 const filteredTasks = computed(() => {
@@ -376,7 +376,7 @@ const lockExecuteClick = (taskId: number) => {
 
 const getExecuteDisabledReason = (task: any) => {
   if (isExecuteClickLocked(task.id)) {
-    return '请勿重复点击，3 秒后可再次执行'
+    return '请勿重复点击，5 秒后可再次执行'
   }
   if (canExecuteTask(task)) {
     return ''
@@ -559,7 +559,7 @@ const runTask = async (task: any) => {
   }
   const taskId = task.id
   if (isExecuteClickLocked(taskId)) {
-    ElMessage.warning('请勿重复点击，3 秒后可再次执行')
+    ElMessage.warning('请勿重复点击，5 秒后可再次执行')
     return
   }
   lockExecuteClick(taskId)

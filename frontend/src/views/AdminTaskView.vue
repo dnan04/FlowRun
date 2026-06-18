@@ -50,8 +50,8 @@
             <el-form-item>
               <template #label>
                 <span class="label-with-help">
-                  <span>重复触发窗口</span>
-                  <el-tooltip content="单位为分钟。同一任务在窗口期内若存在 PENDING/RUNNING 记录，会拦截重复触发；留空表示不限制。" placement="top">
+                  <span><span class="required-mark">*</span>重复触发窗口</span>
+                  <el-tooltip content="单位为分钟。同一任务在窗口期内若存在 PENDING/RUNNING 记录，会拦截重复触发。" placement="top">
                     <span class="help-icon">i</span>
                   </el-tooltip>
                 </span>
@@ -61,7 +61,7 @@
                 :min="1"
                 :max="240"
                 :value-on-clear="undefined"
-                placeholder="默认空"
+                placeholder="请输入重复触发窗口"
                 style="width: 100%"
               />
             </el-form-item>
@@ -217,12 +217,13 @@
 
           <el-row :gutter="14">
             <el-col :span="12">
-              <el-form-item label="环境名称(environmentCode)">
+              <el-form-item>
+                <template #label><span><span class="required-mark">*</span>环境名称(environmentCode)</span></template>
                 <el-select
                   v-model="form.dsEnvironmentCode"
                   clearable
                   filterable
-                  placeholder="默认空"
+                  placeholder="请选择环境"
                   style="width: 100%"
                 >
                   <el-option
@@ -276,7 +277,7 @@
           <el-form-item>
             <template #label>
               <span class="label-with-help">
-                <span>存储过程</span>
+                <span><span class="required-mark">*</span>存储过程</span>
                 <el-tooltip content="必须使用:job_instance_name占位符。" placement="top">
                   <span class="help-icon">i</span>
                 </el-tooltip>
@@ -569,8 +570,8 @@ const createInitialForm = () => ({
   dsWarningType: dsDefaults.warningType,
   dsWorkerGroup: dsDefaults.workerGroup,
   dsExecType: dsDefaults.execType,
-  dsEnvironmentCode: dsDefaults.defaultEnvironmentCode,
-  dsWarningGroupId: dsDefaults.defaultWarningGroupId
+  dsEnvironmentCode: '',
+  dsWarningGroupId: ''
 })
 
 const form = reactive(createInitialForm())
@@ -634,21 +635,26 @@ const applyDsDefaults = () => {
   }
   form.dsWorkerGroup = dsDefaults.workerGroup || 'default'
   form.dsExecType = dsDefaults.execType || 'START_PROCESS'
+
+  const defaultEnv = dsDefaults.defaultEnvironmentCode
+  const envExists = dsOptions.environments.some((e) => e.code === defaultEnv)
   if (!form.dsEnvironmentCode) {
-    form.dsEnvironmentCode = dsDefaults.defaultEnvironmentCode
+    form.dsEnvironmentCode = envExists ? defaultEnv : ''
   }
+
+  const defaultWg = dsDefaults.defaultWarningGroupId
+  const wgExists = dsOptions.warningGroups.some((g) => String(g.id) === String(defaultWg))
   if (!form.dsWarningGroupId) {
-    form.dsWarningGroupId = normalizeWarningGroupValue(dsDefaults.defaultWarningGroupId)
+    form.dsWarningGroupId = wgExists ? normalizeWarningGroupValue(defaultWg) : ''
   }
 }
 
 const getDefaultProjectCode = () => {
-  return (
-    dsOptions.projects.find((project) => project.name === '测试项目')?.code
-    || dsDefaults.defaultProjectCode
-    || dsOptions.projects[0]?.code
-    || ''
-  )
+  const code = dsDefaults.defaultProjectCode
+  if (code && dsOptions.projects.some((p) => p.code === code)) {
+    return code
+  }
+  return ''
 }
 
 const buildPersistedTestResult = (row: TaskRow) => {
@@ -1038,17 +1044,30 @@ const formatRequestError = (error: any, fallback: string) => {
 
 const syncFormFromTask = (row: TaskRow) => {
   const parameterTemplate = row.parameterTemplate || {}
+
+  const defaultProj = dsDefaults.defaultProjectCode
+  const projExists = dsOptions.projects.some((p) => p.code === defaultProj)
+  const resolvedProjDefault = projExists ? defaultProj : ''
+
+  const defaultEnv = dsDefaults.defaultEnvironmentCode
+  const envExists = dsOptions.environments.some((e) => e.code === defaultEnv)
+  const resolvedEnvDefault = envExists ? defaultEnv : ''
+
+  const defaultWg = dsDefaults.defaultWarningGroupId
+  const wgExists = dsOptions.warningGroups.some((g) => String(g.id) === String(defaultWg))
+  const resolvedWgDefault = wgExists ? normalizeWarningGroupValue(defaultWg) : ''
+
   Object.assign(form, createInitialForm(), {
     ...row,
     repeatWindowMinutes: row.repeatWindowMinutes && row.repeatWindowMinutes > 0 ? row.repeatWindowMinutes : undefined,
-    dsProjectCode: parameterTemplate.projectCode || dsDefaults.defaultProjectCode,
+    dsProjectCode: parameterTemplate.projectCode || resolvedProjDefault,
     dsFailureStrategy: parameterTemplate.failureStrategy || dsDefaults.failureStrategy,
     dsProcessInstancePriority: parameterTemplate.processInstancePriority || dsDefaults.processInstancePriority,
     dsWarningType: parameterTemplate.warningType || dsDefaults.warningType,
     dsWorkerGroup: dsDefaults.workerGroup || 'default',
     dsExecType: dsDefaults.execType || 'START_PROCESS',
-    dsEnvironmentCode: parameterTemplate.environmentCode ? `${parameterTemplate.environmentCode}` : dsDefaults.defaultEnvironmentCode,
-    dsWarningGroupId: normalizeWarningGroupValue(parameterTemplate.warningGroupId || dsDefaults.defaultWarningGroupId),
+    dsEnvironmentCode: parameterTemplate.environmentCode ? `${parameterTemplate.environmentCode}` : resolvedEnvDefault,
+    dsWarningGroupId: normalizeWarningGroupValue(parameterTemplate.warningGroupId || resolvedWgDefault),
     dsCallbackMethod: row.dsCallbackMethod || ''
   })
 
@@ -1077,7 +1096,31 @@ const editTask = async (row: TaskRow) => {
   }
 }
 
+const validateTaskForm = () => {
+  if (form.repeatWindowMinutes === undefined || form.repeatWindowMinutes === null) {
+    ElMessage.error('重复触发窗口不能为空')
+    return false
+  }
+  if (isDsTask.value) {
+    if (!form.engineTarget || !form.engineTarget.trim()) {
+      ElMessage.error('流程定义编码不能为空')
+      return false
+    }
+    if (!form.dsEnvironmentCode || !form.dsEnvironmentCode.trim()) {
+      ElMessage.error('环境名称(environmentCode)不能为空')
+      return false
+    }
+  } else {
+    if (!pgParameterText.value || !pgParameterText.value.trim()) {
+      ElMessage.error('存储过程不能为空')
+      return false
+    }
+  }
+  return true
+}
+
 const saveTask = async () => {
+  if (!validateTaskForm()) return
   try {
     saving.value = true
     const { data } = await http.post('/admin/tasks', buildPayload(false))
@@ -1093,6 +1136,7 @@ const saveTask = async () => {
 }
 
 const testTask = async () => {
+  if (!validateTaskForm()) return
   try {
     testing.value = true
     const { data } = await http.post('/admin/tasks/test-execution', buildPayload(false), LONG_RUNNING_REQUEST_CONFIG)
@@ -1114,6 +1158,7 @@ const testTask = async () => {
 }
 
 const publishTask = async () => {
+  if (!validateTaskForm()) return
   try {
     publishing.value = true
     const { data } = await http.post('/admin/tasks', buildPayload(true))
