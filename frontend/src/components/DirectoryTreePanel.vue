@@ -22,7 +22,7 @@
           <button
             class="directory-item directory-level-2"
             :class="{ active: modelValue === directory.id }"
-            :data-count="getDirectoryTaskCount(directory.id)"
+            :data-count="directoryTaskCounts[directory.id] || 0"
             @click="$emit('update:modelValue', directory.id)"
           >
             <span
@@ -75,7 +75,7 @@
           <button
             class="directory-item directory-level-3"
             :class="{ active: modelValue === child.id }"
-            :data-count="getDirectoryTaskCount(child.id)"
+            :data-count="directoryTaskCounts[child.id] || 0"
             @click="$emit('update:modelValue', child.id)"
           >
             <el-icon class="directory-folder-icon"><Folder /></el-icon>
@@ -197,10 +197,14 @@ const collectDirectoryIds = (directoryId: number) => {
   return ids
 }
 
-const getDirectoryTaskCount = (directoryId: number) => {
-  const directoryIds = collectDirectoryIds(directoryId)
-  return props.tasks.filter((task) => directoryIds.includes(task.directoryId)).length
-}
+const directoryTaskCounts = computed(() => {
+  const counts: Record<number, number> = {}
+  props.directories.forEach((dir) => {
+    const directoryIds = collectDirectoryIds(dir.id)
+    counts[dir.id] = props.tasks.filter((task) => directoryIds.includes(task.directoryId)).length
+  })
+  return counts
+})
 
 const hasChildren = (directory: DirectoryNode) => Boolean(directory.children?.length)
 

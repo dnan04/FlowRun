@@ -1,4 +1,5 @@
 import re
+import time
 from dataclasses import dataclass
 
 from sqlalchemy import create_engine, text
@@ -19,10 +20,22 @@ class ReportUser:
 
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_engine = None
+_cached_users = None
+_cache_timestamp = 0.0
 
 
 def normalize_email(value: str | None) -> str:
     return (value or "").strip().lower()
+
+
+def _get_engine():
+    global _engine
+    if not settings.report_user_sqlalchemy_url:
+        return None
+    if _engine is None:
+        _engine = create_engine(settings.report_user_sqlalchemy_url, pool_pre_ping=True)
+    return _engine
 
 
 def is_report_user_source_configured() -> bool:
@@ -30,7 +43,14 @@ def is_report_user_source_configured() -> bool:
 
 
 def list_report_users(keyword: str | None = None, limit: int | None = None) -> list[ReportUser]:
-    if not settings.report_user_sqlalchemy_url:
+    is_full_list = keyword is None and limit is None
+    global _cached_users, _cache_timestamp
+
+    if is_full_list and _cached_users is not None and (time.time() - _cache_timestamp < 300):
+        return _cached_users
+
+    engine = _get_engine()
+    if not engine:
         return []
 
     schema_name = _quote_identifier(settings.report_user_schema.strip())
@@ -70,12 +90,8 @@ def list_report_users(keyword: str | None = None, limit: int | None = None) -> l
         f"ORDER BY {fullname_column}, {email_column}"
         f"{limit_clause}"
     )
-    engine = create_engine(settings.report_user_sqlalchemy_url, pool_pre_ping=True)
-    try:
-        with engine.connect() as connection:
-            rows = connection.execute(sql, params).mappings().all()
-    finally:
-        engine.dispose()
+    with engine.connect() as connection:
+        rows = connection.execute(sql, params).mappings().all()
 
     seen: set[str] = set()
     users: list[ReportUser] = []
@@ -87,6 +103,11 @@ def list_report_users(keyword: str | None = None, limit: int | None = None) -> l
         fullname = str(row["fullname"] or "").strip() or email
         username = str(row["username"] or "").strip() or email
         users.append(ReportUser(username=username, fullname=fullname, email=email))
+
+    if is_full_list:
+        _cached_users = users
+        _cache_timestamp = time.time()
+
     return users
 
 
@@ -112,8 +133,54 @@ def find_report_user(identity: str) -> ReportUser | None:
     return None
 
 
+def get_report_user_by_email(email: str) -> ReportUser | None:
+    engine = _get_engine()
+    if not engine:
+        return None
+
+    schema_name = _quote_identifier(settings.report_user_schema.strip())
+    view_name = _quote_identifier(settings.report_user_view_name.strip())
+    relation_name = f"{schema_name}.{view_name}"
+    username_column = _quote_identifier(settings.report_user_username_column.strip())
+    fullname_column = _quote_identifier(settings.report_user_fullname_column.strip())
+    email_column = _quote_identifier(settings.report_user_email_column.strip())
+
+    sql = text(
+        f"SELECT {username_column} AS username, "
+        f"{fullname_column} AS fullname, "
+        f"{email_column} AS email "
+        f"FROM {relation_name} "
+        f"WHERE {email_column} = :email "
+        f"LIMIT 1"
+    )
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(sql, {"email": email}).mappings().first()
+            if row:
+                return ReportUser(
+                    username=str(row["username"] or "").strip(),
+                    fullname=str(row["fullname"] or "").strip() or email,
+                    email=normalize_email(str(row["email"] or ""))
+                )
+    except Exception:
+        pass
+    return None
+
+
+class ReportUserMap(dict):
+    def get(self, key: str, default=None):
+        if key in self:
+            return self[key]
+        user = get_report_user_by_email(key)
+        if user:
+            self[key] = user
+            return user
+        return default
+
+
 def get_report_user_map() -> dict[str, ReportUser]:
-    return {user.email: user for user in list_report_users()}
+    users = list_report_users()
+    return ReportUserMap({user.email: user for user in users})
 
 
 def _quote_identifier(value: str) -> str:

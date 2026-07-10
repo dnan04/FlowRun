@@ -62,12 +62,13 @@ def get_visible_tasks(db: Session, user: CurrentUser | User) -> list[BusinessTas
         .all()
     )
     result: list[BusinessTaskRead] = []
+    report_users = get_report_user_map()
     for item in tasks:
         if _task_visible_to_user(db, item, user):
             schema = BusinessTaskRead.model_validate(item)
             schema.directory_name = item.directory.directory_name if item.directory else None
             schema.directory_path = _build_directory_path(item.directory) if item.directory else None
-            executable_people = _get_task_people(db, item.id, task_execute_user)
+            executable_people = _get_task_people(db, item.id, task_execute_user, report_users)
             schema.can_execute = _task_executable_by_user(db, item, user)
             schema.executable_user_names = [person["fullname"] for person in executable_people]
             schema.executable_user_emails = [person["email"] for person in executable_people]
@@ -663,13 +664,14 @@ def _clear_task_people(db: Session, task_id: int):
         db.execute(table.delete().where(table.c.task_id == task_id))
 
 
-def _get_task_people(db: Session, task_id: int, table) -> list[dict[str, str]]:
+def _get_task_people(db: Session, task_id: int, table, report_users: dict[str, ReportUser] | None = None) -> list[dict[str, str]]:
     rows = db.execute(
         table.select()
         .where(table.c.task_id == task_id)
         .order_by(table.c.user_fullname_snapshot.asc(), table.c.user_email.asc())
     ).mappings().all()
-    report_users = get_report_user_map()
+    if report_users is None:
+        report_users = get_report_user_map()
     people: list[dict[str, str]] = []
     for row in rows:
         email = normalize_email(row["user_email"])
@@ -680,7 +682,11 @@ def _get_task_people(db: Session, task_id: int, table) -> list[dict[str, str]]:
 
 
 def _get_task_person_emails(db: Session, task_id: int, table) -> set[str]:
-    return {person["email"] for person in _get_task_people(db, task_id, table)}
+    rows = db.execute(
+        table.select()
+        .where(table.c.task_id == task_id)
+    ).mappings().all()
+    return {normalize_email(row["user_email"]) for row in rows}
 
 
 def _format_person(fullname: str, email: str) -> str:
@@ -729,9 +735,9 @@ def _to_admin_schema(db: Session, item: TaskDefinition) -> AdminTaskRead:
     schema = AdminTaskRead.model_validate(item)
     schema.directory_name = item.directory.directory_name if item.directory else None
     schema.directory_path = _build_directory_path(item.directory) if item.directory else None
-    schema.visible_user_emails = [person["email"] for person in _get_task_people(db, item.id, task_visible_user)]
-    schema.executable_user_emails = [person["email"] for person in _get_task_people(db, item.id, task_execute_user)]
-    schema.notify_user_emails = [person["email"] for person in _get_task_people(db, item.id, task_notify_user)]
+    schema.visible_user_emails = sorted(list(_get_task_person_emails(db, item.id, task_visible_user)))
+    schema.executable_user_emails = sorted(list(_get_task_person_emails(db, item.id, task_execute_user)))
+    schema.notify_user_emails = sorted(list(_get_task_person_emails(db, item.id, task_notify_user)))
     return schema
 
 
