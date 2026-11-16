@@ -36,29 +36,50 @@
           <el-card v-for="task in filteredTasks" :key="task.id" class="glass-card task-card">
             <template #header>
               <div class="task-header">
-                <div class="task-title" :title="task.display_name">{{ task.display_name }}</div>
-                <div class="task-card-tools">
-                  <el-button
-                    text
-                    type="primary"
-                    size="small"
-                    :loading="loadingLogTaskId === task.id"
-                    @click.stop="openTaskLogs(task)"
+                <div class="task-header-top">
+                  <el-tag
+                    class="task-engine-tag"
+                    :type="task.engineType === 'PG' ? 'success' : 'primary'"
                   >
-                    日志
-                  </el-button>
-                  <el-tag>{{ task.engineType }}</el-tag>
-                  <el-button
-                    v-if="auth.isAdmin"
-                    text
-                    type="danger"
-                    size="small"
-                    :loading="removingTaskId === task.id"
-                    @click.stop="removeTaskFromCenter(task)"
-                  >
-                    移除
-                  </el-button>
+                    {{ task.engineType }}
+                  </el-tag>
+                  <div class="task-card-tools">
+                    <el-button
+                      text
+                      type="primary"
+                      size="small"
+                      :loading="loadingLogTaskId === task.id"
+                      @click.stop="openTaskLogs(task)"
+                    >
+                      日志
+                    </el-button>
+                    <el-button
+                      v-if="auth.isAdmin"
+                      text
+                      type="danger"
+                      size="small"
+                      :loading="removingTaskId === task.id"
+                      @click.stop="removeTaskFromCenter(task)"
+                    >
+                      移除
+                    </el-button>
+                  </div>
                 </div>
+                <el-tooltip
+                  :content="task.display_name || ''"
+                  placement="top"
+                  :disabled="!isTitleTruncated(task.id)"
+                  :popper-style="TITLE_TOOLTIP_POPPER_STYLE"
+                >
+                  <div
+                    :ref="(el) => setTaskTitleRef(task.id, el)"
+                    :data-task-id="task.id"
+                    class="task-title"
+                    @mouseenter="refreshTitleTruncation(task.id)"
+                  >
+                    {{ task.display_name }}
+                  </div>
+                </el-tooltip>
               </div>
             </template>
 
@@ -203,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import http from '../api/http'
@@ -240,6 +261,97 @@ const DEFAULT_LOG_LIMIT = 10
 const LONG_RUNNING_REQUEST_CONFIG = { timeout: 0 }
 const EXECUTE_CLICK_LOCK_MS = 5000
 const executeClickLockedTaskIds = ref<Set<number>>(new Set())
+
+const TITLE_TOOLTIP_POPPER_STYLE = {
+  maxWidth: '360px',
+  wordBreak: 'break-word'
+} as const
+const taskTitleElements = new Map<number, HTMLElement>()
+const truncatedTitleTaskIds = ref<Set<number>>(new Set())
+
+const isElementTextTruncated = (element: HTMLElement) => {
+  if (!element.textContent?.trim()) {
+    return false
+  }
+  const elementRect = element.getBoundingClientRect()
+  if (elementRect.width <= 0) {
+    return false
+  }
+  const range = document.createRange()
+  range.selectNodeContents(element)
+  const textWidth = range.getBoundingClientRect().width
+  return textWidth - elementRect.width > 0.5 || element.scrollWidth > element.clientWidth
+}
+
+const updateTitleTruncation = (taskId: number, element: HTMLElement) => {
+  const truncated = isElementTextTruncated(element)
+  const currentlyTruncated = truncatedTitleTaskIds.value.has(taskId)
+  if (truncated === currentlyTruncated) {
+    return
+  }
+  const next = new Set(truncatedTitleTaskIds.value)
+  if (truncated) {
+    next.add(taskId)
+  } else {
+    next.delete(taskId)
+  }
+  truncatedTitleTaskIds.value = next
+}
+
+const refreshTitleTruncation = (taskId: number) => {
+  const element = taskTitleElements.get(taskId)
+  if (element) {
+    updateTitleTruncation(taskId, element)
+  }
+}
+
+const refreshAllTitleTruncations = () => {
+  const next = new Set<number>()
+  taskTitleElements.forEach((element, taskId) => {
+    if (isElementTextTruncated(element)) {
+      next.add(taskId)
+    }
+  })
+  truncatedTitleTaskIds.value = next
+}
+
+const titleResizeObserver =
+  typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver((entries) => {
+        entries.forEach((entry) => {
+          const element = entry.target as HTMLElement
+          const taskId = Number(element.dataset.taskId)
+          if (Number.isFinite(taskId)) {
+            updateTitleTruncation(taskId, element)
+          }
+        })
+      })
+    : null
+
+const setTaskTitleRef = (taskId: number, refValue: Element | ComponentPublicInstance | null) => {
+  const previous = taskTitleElements.get(taskId)
+  if (refValue instanceof HTMLElement) {
+    if (previous && previous !== refValue) {
+      titleResizeObserver?.unobserve(previous)
+    }
+    taskTitleElements.set(taskId, refValue)
+    titleResizeObserver?.observe(refValue)
+    return
+  }
+  if (previous) {
+    titleResizeObserver?.unobserve(previous)
+    taskTitleElements.delete(taskId)
+  }
+  if (truncatedTitleTaskIds.value.has(taskId)) {
+    const next = new Set(truncatedTitleTaskIds.value)
+    next.delete(taskId)
+    truncatedTitleTaskIds.value = next
+  }
+}
+
+const isTitleTruncated = (taskId: number) => {
+  return truncatedTitleTaskIds.value.has(taskId)
+}
 
 const filteredTasks = computed(() => {
   if (selectedDirectoryId.value === 'all') {
@@ -616,11 +728,28 @@ const waitForExecutionResult = async (taskId: number, executionId: number) => {
 
 const sleep = (duration: number) => new Promise((resolve) => window.setTimeout(resolve, duration))
 
-onMounted(loadAll)
+watch(
+  () => filteredTasks.value.map((task) => `${task.id}:${task.display_name || ''}`),
+  () => {
+    nextTick(refreshAllTitleTruncations)
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  loadAll()
+  document.fonts?.ready.then(() => {
+    refreshAllTitleTruncations()
+  })
+})
+
+onBeforeUnmount(() => {
+  titleResizeObserver?.disconnect()
+  taskTitleElements.clear()
+})
 </script>
 
 <style scoped>
-.task-header,
 .task-actions {
   display: flex;
   align-items: center;
@@ -628,7 +757,18 @@ onMounted(loadAll)
 }
 
 .task-header {
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.task-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
   min-width: 0;
 }
 
@@ -689,7 +829,7 @@ onMounted(loadAll)
 .task-card {
   display: flex;
   flex-direction: column;
-  height: 310px;
+  height: 328px;
   border-radius: 8px;
   overflow: hidden;
   transition:
@@ -706,7 +846,7 @@ onMounted(loadAll)
 
 .task-card :deep(.el-card__header) {
   flex: 0 0 auto;
-  padding: 10px 12px;
+  padding: 7px 12px 9px;
 }
 
 .task-card :deep(.el-card__body) {
@@ -714,7 +854,7 @@ onMounted(loadAll)
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding: 10px;
+  padding: 10px 12px 12px;
   overflow: hidden;
 }
 
@@ -742,48 +882,60 @@ onMounted(loadAll)
 }
 
 .task-title {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
+  color: var(--text);
   font-size: 16px;
   font-weight: 700;
+  line-height: 22px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.task-engine-tag {
+  flex: 0 0 auto;
+  height: 18px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .task-card-tools {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 3px;
+  gap: 8px;
   white-space: nowrap;
 }
 
 .task-card-tools :deep(.el-button.is-text) {
-  min-height: 22px;
-  padding: 0 3px;
-  font-size: 12px;
-}
-
-.task-card-tools :deep(.el-tag) {
-  height: 20px;
-  padding: 0 5px;
+  height: 18px;
+  min-height: 18px;
+  margin-left: 0;
+  padding: 0 4px;
   font-size: 12px;
   line-height: 18px;
 }
 
 .task-meta-list {
-  flex: 0 0 196px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
 }
 
 .meta-block {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 5px;
-  margin-bottom: 3px;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 5px;
   font-size: 13px;
   line-height: 17px;
+}
+
+.meta-block strong {
+  white-space: nowrap;
 }
 
 .meta-value {
@@ -811,9 +963,10 @@ onMounted(loadAll)
 }
 
 .task-actions {
+  flex: 0 0 auto;
   gap: 8px;
   justify-content: space-between;
-  margin-top: 14px;
+  margin-top: 12px;
   padding-top: 0;
 }
 
